@@ -22,8 +22,29 @@ source <(helm completion zsh)
 #kube-ps1
 source ~/.kube-ps1/kube-ps1.sh
 
+#http_proxy show port
+proxy_prompt_info() {
+  # normalize all cases
+  local http="${HTTP_PROXY:-${http_proxy:-}}"
+  local https="${HTTPS_PROXY:-${https_proxy:-}}"
+
+  # if neither set, show nothing
+  [[ -z "$http$https" ]] && return
+
+  # extract port
+  local get_port
+  get_port() { printf '%s' "$1" | sed -E 's#.*:([0-9]+).*#\1#'; }
+
+  local port mark
+  port=$(get_port "${http:-$https}")
+
+  # add * if both HTTP and HTTPS defined (any case)
+  [[ -n "$http" && -n "$https" ]] && mark="*" || mark=""
+
+  printf '%%F{yellow}PROXY: %s%s%%f' "$port" "$mark"
+}
 # Put Kubernetes on the RIGHT to keep agnoster clean:
-RPROMPT='$(kube_ps1)'
+RPROMPT='$(kube_ps1) $(proxy_prompt_info)'
 
 #krew
 export PATH="${KREW_ROOT:-$HOME/.krew}/bin:$PATH"
@@ -41,6 +62,8 @@ export GPG_TTY=$(tty);
 #golang
 export GOPATH=$HOME/go
 export PATH=$PATH:$GOROOT/bin:$GOPATH/bin
+#npm
+export PATH=$HOME/.npm-global/bin:$PATH
 #cuda
 export LD_LIBRARY_PATH=/usr/local/cuda/lib64
 export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/usr/local/lib64/systemc/"
