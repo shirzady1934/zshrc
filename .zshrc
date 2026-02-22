@@ -10,6 +10,7 @@ plugins=(
   helm
   fzf
   colored-man-pages
+  terraform
 )
 source $ZSH/oh-my-zsh.sh
 
