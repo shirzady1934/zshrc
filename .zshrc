@@ -80,3 +80,5 @@ alias kctx='kubectl ctx'
 #proton and gpu
 alias proton="$HOME/.steam/steam/steamapps/common/Proton\ -\ Experimental/proton"
 alias import_nvidia="export __NV_PRIME_RENDER_OFFLOAD=1; export __GLX_VENDOR_LIBRARY_NAME=nvidia;"
+export TERM=xterm-256color
+export COLORTERM=truecolor
