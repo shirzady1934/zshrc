@@ -1,144 +1,212 @@
 # Kubernetes Zsh Environment Bootstrap
 
-This repository provides a single, idempotent shell script to set up a
-powerful and modern command-line environment tailored specifically for
-interacting with Kubernetes clusters. It automates the installation of
-essential CLI tools, configures Zsh with Oh My Zsh, and integrates
-productivity enhancers like **kube-ps1** and **fzf**.
+A portable Zsh setup tailored for working with Kubernetes — kubectl, Helm,
+Argo CD, kube-ps1, fzf — that **gracefully skips any tool that isn't
+installed on the current machine**. Drop the same `.zshrc` onto any Linux
+or macOS host and only the parts whose binaries exist will activate.
 
-------------------------------------------------------------------------
+---
 
 ## Features
 
-The bootstrap script streamlines your setup by installing the following
-core components:
+### Shell & productivity
+- **Zsh + Oh My Zsh** with the `agnoster` theme
+- **kube-ps1** — shows current context and namespace in `RPROMPT`
+- **HTTP_PROXY indicator** — shows proxy port in the prompt when set
+- **fzf** — `Ctrl-R` history, `Ctrl-T` file search
 
-### Shell & Productivity
+### Kubernetes tooling
+- **kubectl**, **Helm v3**
+- **Krew** with `kubectl-ctx` and `kubectl-ns` plugins
+- **Argo CD CLI** integration (see below)
+- **Argo Rollouts** completion (when `kubectl-argo-rollouts` is installed)
 
--   **Zsh & Oh My Zsh** -- Modern shell with a rich plugin ecosystem.
--   **fzf (Fuzzy Finder)** -- Interactive fuzzy search for history and
-    files.
--   **kube-ps1** -- Shows the current Kubernetes context and namespace
-    in your prompt.
+### Smart completions
+- All tool completions are loaded **only when the binary is present** — no
+  errors on minimal hosts.
+- `k argocd ...` and `k argo rollouts ...` autocomplete correctly via a
+  custom dispatcher that bridges kubectl plugin completion gaps.
+- Argo CD app **names** and **revision SHAs** complete dynamically (the
+  argocd CLI itself doesn't ship this) with a 30s cache.
 
-### Kubernetes Tooling
+---
 
--   **kubectl** -- Official Kubernetes CLI.
--   **Helm v3** -- Kubernetes package manager.
--   **Krew** -- Plugin manager for kubectl, including:
-    -   **kubectl-ctx** -- Switch between Kubernetes contexts.
-    -   **kubectl-ns** -- Switch between namespaces.
+## Argo CD integration
 
-------------------------------------------------------------------------
+This config adds a `kargo` shell function that runs `argocd --core`
+against the `argocd` namespace **without** touching your current kubectl
+context — useful when your day-to-day namespace is something else:
+
+```bash
+kargo app list
+kargo app sync zentra-prod --revision <SHA>
+kargo app history porta-prod
+```
+
+You can also use the kubectl-plugin form, which has identical completion:
+
+```bash
+k argocd app sync zentra-prod --revision <TAB>   # → list of historical SHAs, newest first
+k argocd app sync <TAB>                          # → list of app names
+```
+
+The `kargo` command works by spinning up a throwaway kubeconfig that
+points to namespace `argocd`, running argocd Core mode against it, then
+deleting it on exit. Your real `~/.kube/config` and current namespace are
+never modified.
+
+---
 
 ## Prerequisites
 
-You only need:
+- **Linux** or **macOS**
+- `curl`
+- `sudo` (only needed by `setup.sh` to install system packages)
 
--   A **Linux** or **macOS** environment\
--   `curl` installed\
--   `sudo` access (to install system packages)
-
-------------------------------------------------------------------------
+---
 
 ## Installation
 
-To bootstrap your environment, run:
+### Clone and run
 
-``` bash
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/shirzady1934/zshrc/main/bootstrap.sh)"
-```
-------------------------------------------------------------------------
-
-## What the Script Does
-
-### 1. Detects OS
-
-Determines if your system is **Linux** or **macOS**.
-
-### 2. Installs Dependencies
-
-Uses the system package manager (`apt`, `dnf`, `yum`, `pacman`, or
-`brew`) to install: - `git` - `zsh` - `fzf` - `tar` and other required
-utilities
-
-### 3. Installs Core CLI Tools
-
-Automatically downloads and installs: - Latest **kubectl** - Latest
-**helm**
-
-### 4. Sets Up Zsh
-
--   Installs **Oh My Zsh**
--   Installs **kube-ps1**
--   Installs **fzf**
-
-### 5. Installs kubectl Plugins
-
-Sets up **krew**, then installs: - `kubectl-ctx` - `kubectl-ns`
-
-------------------------------------------------------------------------
-
-## Supported Operating Systems
-
-The script currently supports:
-
-### Linux
-
--   **Debian/Ubuntu** (`apt`)
--   **RHEL/CentOS/Fedora** (`dnf` / `yum`)
--   **Arch Linux** (`pacman`)
-
-### macOS
-
--   Requires **Homebrew**; installs automatically if missing.
-
-------------------------------------------------------------------------
-
-## Post-Installation
-
-After installation finishes, start a new shell session:
-
-``` bash
+```bash
+git clone https://github.com/shirzady1934/zshrc ~/zshrc
+~/zshrc/setup.sh
 exec zsh
 ```
 
-You will now have:
+`setup.sh` installs the tools **and** copies `.zshrc` into place (your
+existing `~/.zshrc` is backed up to `~/.zshrc.bak.<timestamp>`).
 
--   **Kubernetes-aware prompt**:
+### Just take the `.zshrc` (no tool install)
 
-        (my-cluster:dev) ~ $
+```bash
+git clone https://github.com/shirzady1934/zshrc ~/zshrc
+ln -sf ~/zshrc/.zshrc ~/.zshrc
+exec zsh
+```
 
--   **Quick context switching**:
+### Override behavior via env vars
 
-    ``` bash
-    kctx
-    kns
-    ```
+```bash
+ARGOCD_VERSION=v3.3.9 ~/zshrc/setup.sh        # pin to cluster version
+INSTALL_ARGOCD=no ~/zshrc/setup.sh            # skip argocd
+INSTALL_ARGO_ROLLOUTS=no ~/zshrc/setup.sh     # skip rollouts plugin
+INSTALL_ZSHRC=no ~/zshrc/setup.sh             # don't touch ~/.zshrc
+```
 
--   **Fuzzy search via fzf**:
+---
 
-    -   `CTRL+R` → fuzzy history search\
-    -   `CTRL+T` → file search
+## What `setup.sh` does
 
-------------------------------------------------------------------------
+1. **Detects OS** — Linux or macOS.
+2. **Installs base packages** via `apt`, `dnf`, `yum`, `pacman`, or `brew`:
+   git, curl, zsh, tar, unzip, ca-certificates, fzf.
+3. **Installs Oh My Zsh** (skips if already present).
+4. **Installs latest kubectl** to `/usr/local/bin`.
+5. **Installs latest Helm v3**.
+6. **Installs latest Argo CD CLI** (`ARGOCD_VERSION=` to pin, `INSTALL_ARGOCD=no` to skip).
+7. **Installs latest `kubectl-argo-rollouts`** + generates `~/.argo-rollouts-completion.zsh`
+   (`ARGO_ROLLOUTS_VERSION=` / `INSTALL_ARGO_ROLLOUTS=no`).
+8. **Installs kube-ps1** to `~/.kube-ps1`.
+9. **Installs Krew** + the `ctx` and `ns` plugins.
+10. **Installs `.zshrc`** from the repo into `$HOME` (backs up any existing
+    non-symlink). Skip with `INSTALL_ZSHRC=no`.
+
+It is idempotent — re-running it skips anything already installed.
+
+---
+
+## Supported operating systems
+
+| OS         | Package manager  |
+|------------|------------------|
+| Debian / Ubuntu | `apt`        |
+| RHEL / CentOS / Fedora | `dnf` / `yum` |
+| Arch Linux | `pacman`         |
+| macOS      | `brew` (installed if missing) |
+
+---
+
+## Portability
+
+The `.zshrc` is designed to be the **same file across every machine**.
+Each tool-specific block is guarded with a `command -v` (or file existence)
+check, so missing tools don't produce errors or block shell startup:
+
+| Guarded section | Activation condition |
+|---|---|
+| Docker completion | `docker` on `$PATH` |
+| kubectl completion + dispatcher | `kubectl` on `$PATH` |
+| Helm completion | `helm` on `$PATH` |
+| Argo CD completion + `kargo` + smart completions | both `argocd` and `kubectl` on `$PATH` |
+| Argo Rollouts completion | `kubectl-argo-rollouts` on `$PATH` |
+| kube-ps1 prompt | `~/.kube-ps1/kube-ps1.sh` exists |
+| `myenv` (Python venv) alias | `~/Tensorflow/.env/` exists |
+| `proton` alias | Proton binary exists |
+| CUDA `LD_LIBRARY_PATH` | `/usr/local/cuda/lib64` exists |
+
+`PATH` is managed with `typeset -U path` so entries auto-dedupe — safe to
+re-source the rc file repeatedly.
+
+---
+
+## Post-installation
+
+```bash
+exec zsh
+```
+
+You should see something like:
+
+```
+user@host ~  (⎈|my-cluster:default)
+```
+
+Try:
+
+| Command | Result |
+|---------|--------|
+| `kctx`  | Switch kubectl context (krew plugin) |
+| `kns`   | Switch namespace (krew plugin) |
+| `Ctrl-R` | fzf history search |
+| `Ctrl-T` | fzf file search |
+| `kargo app list` | List Argo CD apps in core mode |
+| `k argocd app sync <TAB>` | Tab-complete app names |
+| `k argocd app sync <app> --revision <TAB>` | Tab-complete deploy SHAs |
+
+---
 
 ## Troubleshooting
 
-### Missing sudo or curl
+### Completion shows file names instead of subcommands
 
-Ensure: - `sudo` permissions are available\
-- `curl` is installed
+You probably edited `.zshrc` and need to clear the completion cache:
 
-### Unsupported OS
+```bash
+rm -f ~/.zcompdump* && exec zsh
+```
 
-If your Linux distro is not supported, the script will exit and show the
-packages you must install manually.
+zsh prefers a compiled `.zwc` dump over the live config — stale dumps
+cause "unknown command" or "file completion" surprises.
 
-### Authentication Issues
+### `argocd app list` fails with `configmap "argocd-cm" not found`
 
-This script **does not** configure: - Cloud provider CLIs\
-- `~/.kube/config`
+Argo CD Core mode reads its configmap from the **current kubeconfig
+context's namespace**. Use the bundled `kargo` wrapper, which temporarily
+points to namespace `argocd`, or switch namespace with `kns argocd`.
 
-You must authenticate separately to access Kubernetes clusters.
+### `error: unknown command "argocd" for "kubectl"` while tab-completing
 
+This was kubectl's completion intercepting `k argocd <TAB>`. The included
+`_k_dispatch` function fixes it — make sure the `.zshrc` is loaded and
+the dump is fresh (see above).
+
+### Unsupported Linux distro
+
+`setup.sh` will exit and print the package list to install manually.
+
+### Authentication
+
+`setup.sh` does **not** configure cloud CLIs or `~/.kube/config`. Set those
+up separately.
